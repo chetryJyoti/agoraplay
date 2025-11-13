@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgoraPlay - Video Call Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+
+        .controls {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+        }
+
+        button {
+            flex: 1;
+            padding: 14px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        #join-btn {
+            background: #667eea;
+            color: white;
+        }
+
+        #join-btn:hover:not(:disabled) {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        #leave-btn {
+            background: #ef4444;
+            color: white;
+        }
+
+        #leave-btn:hover:not(:disabled) {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(239, 68, 68, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+        }
+
+        .video-container {
+            background: #1a1a1a;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            position: relative;
+            min-height: 400px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .video-container video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover;
+        }
+
+        .video-container > div:not(.video-label) {
+            width: 100% !important;
+            height: 100% !important;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .video-container > div:not(.video-label) > video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover;
+        }
+
+        .video-label {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 10;
+        }
+
+        #status {
+            text-align: center;
+            color: white;
+            margin: 20px 0;
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>AgoraPlay Video Call</h1>
+
+        <div class="controls">
+            <div class="input-group">
+                <label for="channel">Channel Name</label>
+                <input
+                    type="text"
+                    id="channel"
+                    placeholder="Enter channel name (e.g., demo)"
+                    value="demo"
+                >
+            </div>
+            <div class="button-group">
+                <button id="join-btn">Join Call</button>
+                <button id="leave-btn" disabled>Leave Call</button>
+            </div>
+        </div>
+
+        <div id="status"></div>
+
+        <div class="video-grid">
+            <div class="video-container" id="local-container">
+                <div class="video-label">You (Local)</div>
+            </div>
+            <div class="video-container" id="remote-container">
+                <div class="video-label">Remote User</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agora Web SDK -->
+    <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.23.1.js"></script>
+
+    <script>
+        // Enable Agora SDK debug logging
+        AgoraRTC.setLogLevel(0); // 0 = DEBUG, 1 = INFO, 2 = WARNING, 3 = ERROR, 4 = NONE
+
+        // Initialize Agora client
+        const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+        console.log('Agora client initialized');
+
+        let localTracks = {
+            videoTrack: null,
+            audioTrack: null
+        };
+
+        let remoteUsers = {};
+
+        // DOM elements
+        const channelInput = document.getElementById('channel');
+        const joinBtn = document.getElementById('join-btn');
+        const leaveBtn = document.getElementById('leave-btn');
+        const status = document.getElementById('status');
+        const localContainer = document.getElementById('local-container');
+        const remoteContainer = document.getElementById('remote-container');
+
+        // Update status message
+        function updateStatus(message, isError = false) {
+            status.textContent = message;
+            status.style.color = isError ? '#ef4444' : 'white';
+        }
+
+        // Join channel
+        async function joinChannel() {
+            const channelName = channelInput.value.trim();
+
+            if (!channelName) {
+                updateStatus('Please enter a channel name', true);
+                return;
+            }
+
+            try {
+                updateStatus('Fetching token...');
+                joinBtn.disabled = true;
+
+                // Fetch token from Agora API (core service)
+                console.log('Fetching token for channel:', channelName);
+                const response = await fetch(`/api/agora/token/?channel=${channelName}`);
+                const data = await response.json();
+                console.log('Token response:', data);
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to get token');
+                }
+
+                updateStatus('Connecting to channel...');
+                console.log('Joining channel with:', {
+                    appId: data.appId,
+                    channel: data.channel,
+                    uid: data.uid
+                });
+
+                // Join the channel
+                const uid = await client.join(
+                    data.appId,
+                    data.channel,
+                    data.token,
+                    data.uid
+                );
+                console.log('Successfully joined channel with UID:', uid);
+
+                updateStatus('Creating local tracks...');
+
+                // Create local audio and video tracks
+                console.log('Creating microphone track...');
+                localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
+                console.log('Microphone track created');
+
+                console.log('Creating camera track...');
+                localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack();
+                console.log('Camera track created');
+
+                // Play local video
+                console.log('Playing local video...');
+                // Clear container first
+                localContainer.innerHTML = '<div class="video-label">You (Local)</div>';
+                localTracks.videoTrack.play(localContainer);
+                console.log('Local video playing');
+
+                // Publish local tracks
+                updateStatus('Publishing tracks...');
+                console.log('Publishing tracks...');
+                await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
+                console.log('Tracks published successfully');
+
+                updateStatus('Connected! Waiting for others to join...');
+
+                joinBtn.disabled = true;
+                leaveBtn.disabled = false;
+                channelInput.disabled = true;
+
+            } catch (error) {
+                console.error('Error joining channel:', error);
+                console.error('Error details:', error.code, error.message);
+                updateStatus(`Error: ${error.message}`, true);
+                joinBtn.disabled = false;
+
+                // Clean up on error
+                if (localTracks.audioTrack) {
+                    localTracks.audioTrack.close();
+                    localTracks.audioTrack = null;
+                }
+                if (localTracks.videoTrack) {
+                    localTracks.videoTrack.close();
+                    localTracks.videoTrack = null;
+                }
+            }
+        }
+
+        // Leave channel
+        async function leaveChannel() {
+            try {
+                // Stop and close local tracks
+                if (localTracks.audioTrack) {
+                    localTracks.audioTrack.stop();
+                    localTracks.audioTrack.close();
+                }
+                if (localTracks.videoTrack) {
+                    localTracks.videoTrack.stop();
+                    localTracks.videoTrack.close();
+                }
+
+                // Remove all remote users
+                remoteUsers = {};
+
+                // Leave the channel
+                await client.leave();
+
+                updateStatus('Left the channel');
+
+                joinBtn.disabled = false;
+                leaveBtn.disabled = true;
+                channelInput.disabled = false;
+
+                // Clear video containers
+                localContainer.innerHTML = '<div class="video-label">You (Local)</div>';
+                remoteContainer.innerHTML = '<div class="video-label">Remote User</div>';
+
+            } catch (error) {
+                console.error('Error leaving channel:', error);
+                updateStatus(`Error: ${error.message}`, true);
+            }
+        }
+
+        // Handle user published (remote user starts streaming)
+        client.on("user-published", async (user, mediaType) => {
+            await client.subscribe(user, mediaType);
+            console.log("Subscribe success");
+
+            if (mediaType === "video") {
+                console.log("Playing remote video for user:", user.uid);
+                remoteUsers[user.uid] = user;
+
+                // Clear the container first
+                remoteContainer.innerHTML = '<div class="video-label">Remote User</div>';
+
+                // Play the remote video
+                user.videoTrack.play(remoteContainer);
+                console.log("Remote video playing");
+                updateStatus('Remote user connected!');
+            }
+
+            if (mediaType === "audio") {
+                console.log("Playing remote audio for user:", user.uid);
+                user.audioTrack.play();
+            }
+        });
+
+        // Handle user unpublished
+        client.on("user-unpublished", (user, mediaType) => {
+            if (mediaType === "video") {
+                delete remoteUsers[user.uid];
+                remoteContainer.innerHTML = '<div class="video-label">Remote User</div>';
+                updateStatus('Remote user left');
+            }
+        });
+
+        // Event listeners
+        joinBtn.addEventListener('click', joinChannel);
+        leaveBtn.addEventListener('click', leaveChannel);
+
+        // Allow Enter key to join
+        channelInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !joinBtn.disabled) {
+                joinChannel();
+            }
+        });
+    </script>
+</body>
+</html>

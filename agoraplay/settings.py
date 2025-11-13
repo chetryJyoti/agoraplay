@@ -11,6 +11,11 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +25,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-sfetppo&)@=bth@*d08f-40y+7fthkstq$cs*red3!e-c((!=y'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-sfetppo&)@=bth@*d08f-40y+7fthkstq$cs*red3!e-c((!=y')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['bb565b9a7cbe.ngrok-free.app', "localhost"]
 
 
 # Application definition
@@ -37,11 +42,18 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Third party apps
+    'rest_framework',
+    'corsheaders',
+    # Local apps
+    'core',  # Core utilities and shared logic
+    'rtc',   # Real-time communication (video/audio)
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # CORS middleware
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -120,3 +132,10 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# CORS Settings - Allow all origins for local development
+CORS_ALLOW_ALL_ORIGINS = True
+
+# Agora Configuration
+AGORA_APP_ID = os.getenv('AGORA_APP_ID')
+AGORA_APP_CERTIFICATE = os.getenv('AGORA_APP_CERTIFICATE')
