@@ -4,203 +4,79 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AgoraPlay - Video Call Demo</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1200px;
-            width: 100%;
-        }
-
-        h1 {
-            color: white;
-            text-align: center;
-            margin-bottom: 30px;
-            font-size: 2.5em;
-        }
-
-        .controls {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            margin-bottom: 30px;
-        }
-
-        .input-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        input {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 16px;
-            transition: border-color 0.3s;
-        }
-
-        input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .button-group {
-            display: flex;
-            gap: 15px;
-        }
-
-        button {
-            flex: 1;
-            padding: 14px;
-            font-size: 16px;
-            font-weight: 600;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        #join-btn {
-            background: #667eea;
-            color: white;
-        }
-
-        #join-btn:hover:not(:disabled) {
-            background: #5568d3;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        #leave-btn {
-            background: #ef4444;
-            color: white;
-        }
-
-        #leave-btn:hover:not(:disabled) {
-            background: #dc2626;
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(239, 68, 68, 0.4);
-        }
-
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .video-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 20px;
-        }
-
-        .video-container {
-            background: #1a1a1a;
-            border-radius: 15px;
-            overflow: hidden;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            position: relative;
-            min-height: 400px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .video-container video {
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover;
-        }
-
-        .video-container > div:not(.video-label) {
-            width: 100% !important;
-            height: 100% !important;
-            position: absolute;
-            top: 0;
-            left: 0;
-        }
-
-        .video-container > div:not(.video-label) > video {
-            width: 100% !important;
-            height: 100% !important;
-            object-fit: cover;
-        }
-
-        .video-label {
-            position: absolute;
-            top: 15px;
-            left: 15px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 14px;
-            font-weight: 600;
-            z-index: 10;
-        }
-
-        #status {
-            text-align: center;
-            color: white;
-            margin: 20px 0;
-            font-size: 18px;
-            font-weight: 500;
-        }
-
-        .hidden {
-            display: none;
-        }
-    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
 </head>
-<body>
-    <div class="container">
-        <h1>AgoraPlay Video Call</h1>
-
-        <div class="controls">
-            <div class="input-group">
-                <label for="channel">Channel Name</label>
+<body class="m-0 p-0 font-sans overflow-hidden">
+    <!-- Pre-call Screen -->
+    <div class="flex items-center justify-center h-screen bg-gradient-to-br from-gray-800 to-gray-900" id="pre-call-screen">
+        <div class="bg-gray-800 rounded-2xl p-12 shadow-2xl text-center w-96">
+            <h1 class="text-white text-3xl font-medium mb-8">Join a Video Call</h1>
+            <div class="mb-6 text-left">
+                <label for="channel-input" class="block text-gray-300 mb-2 text-sm font-medium">Channel Name</label>
                 <input
                     type="text"
-                    id="channel"
-                    placeholder="Enter channel name (e.g., demo)"
+                    id="channel-input"
+                    placeholder="Enter channel name"
                     value="demo"
+                    class="w-full px-4 py-3 bg-gray-700 text-white border-2 border-gray-600 rounded-lg text-base outline-none focus:border-blue-500 transition-colors"
                 >
             </div>
-            <div class="button-group">
-                <button id="join-btn">Join Call</button>
-                <button id="leave-btn" disabled>Leave Call</button>
-            </div>
+            <button class="w-full bg-blue-600 text-white py-3 rounded-lg text-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" id="join-btn">Join Call</button>
+        </div>
+    </div>
+
+    <!-- Video Call Screen -->
+    <div class="hidden fixed inset-0 bg-gray-900" id="video-call-screen">
+        <!-- Main Video (Remote Participant) -->
+        <div id="main-video" class="absolute inset-0 bg-black flex items-center justify-center">
+            <div class="absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1 rounded text-sm" id="remote-name">Waiting for others...</div>
         </div>
 
-        <div id="status"></div>
+        <!-- Self View (Local - Bottom Right) -->
+        <div id="self-view" class="absolute bottom-20 right-4 w-[280px] h-[160px] bg-black rounded-lg overflow-hidden shadow-xl border-2 border-gray-700 mb-4">
+            <div class="absolute bottom-2 left-2 bg-black/60 text-white px-2 py-1 rounded text-xs">You</div>
+        </div>
 
-        <div class="video-grid">
-            <div class="video-container" id="local-container">
-                <div class="video-label">You (Local)</div>
+        <!-- Bottom Control Bar -->
+        <div class="absolute bottom-0 left-0 right-0 h-20 bg-gray-900/95 backdrop-blur-sm flex items-center justify-between px-6 border-t border-gray-800">
+            <!-- Left: Meeting Info -->
+            <div class="flex items-center gap-3 text-white">
+                <span class="text-sm font-medium" id="meeting-time">00:00</span>
+                <span class="text-gray-500">•</span>
+                <span class="text-sm font-medium" id="meeting-code"></span>
             </div>
-            <div class="video-container" id="remote-container">
-                <div class="video-label">Remote User</div>
+
+            <!-- Center: Controls -->
+            <div class="flex items-center gap-3">
+                <button class="w-12 h-12 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors" id="toggle-mic" title="Microphone">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-white">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+                    </svg>
+                </button>
+                <button class="w-12 h-12 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors" id="toggle-camera" title="Camera">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-white">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
+                </button>
+                <button class="w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center transition-colors" id="leave-call-btn" title="Leave call">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-white">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 3.75v4.5m0-4.5h-4.5m4.5 0-6 6m3 12c-8.284 0-15-6.716-15-15V4.5A2.25 2.25 0 0 1 4.5 2.25h1.372c.516 0 .966.351 1.091.852l1.106 4.423c.11.44-.054.902-.417 1.173l-1.293.97a1.062 1.062 0 0 0-.38 1.21 12.035 12.035 0 0 0 7.143 7.143c.441.162.928-.004 1.21-.38l.97-1.293a1.125 1.125 0 0 1 1.173-.417l4.423 1.106c.5.125.852.575.852 1.091V19.5a2.25 2.25 0 0 1-2.25 2.25h-2.25Z" />
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Right: More Options -->
+            <div class="flex items-center gap-2">
+                <button class="w-10 h-10 rounded-full hover:bg-gray-700 flex items-center justify-center transition-colors text-white" title="Meeting details">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                    </svg>
+                </button>
+                <button class="w-10 h-10 rounded-full hover:bg-gray-700 flex items-center justify-center transition-colors text-white" title="Show everyone">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+                    </svg>
+                </button>
             </div>
         </div>
     </div>
@@ -223,18 +99,96 @@
 
         let remoteUsers = {};
 
-        // DOM elements
-        const channelInput = document.getElementById('channel');
-        const joinBtn = document.getElementById('join-btn');
-        const leaveBtn = document.getElementById('leave-btn');
-        const status = document.getElementById('status');
-        const localContainer = document.getElementById('local-container');
-        const remoteContainer = document.getElementById('remote-container');
+        // Media state
+        let isVideoEnabled = true;
+        let isAudioEnabled = true;
 
-        // Update status message
-        function updateStatus(message, isError = false) {
-            status.textContent = message;
-            status.style.color = isError ? '#ef4444' : 'white';
+        // DOM elements
+        const preCallScreen = document.getElementById('pre-call-screen');
+        const videoCallScreen = document.getElementById('video-call-screen');
+        const channelInput = document.getElementById('channel-input');
+        const joinBtn = document.getElementById('join-btn');
+        const leaveCallBtn = document.getElementById('leave-call-btn');
+        const mainVideo = document.getElementById('main-video');
+        const selfView = document.getElementById('self-view');
+        const remoteName = document.getElementById('remote-name');
+        const meetingCode = document.getElementById('meeting-code');
+        const meetingTime = document.getElementById('meeting-time');
+        const toggleMic = document.getElementById('toggle-mic');
+        const toggleCamera = document.getElementById('toggle-camera');
+
+        // Meeting timer
+        let meetingStartTime = null;
+        let timerInterval = null;
+
+        // Start meeting timer
+        function startTimer() {
+            meetingStartTime = Date.now();
+            timerInterval = setInterval(() => {
+                const elapsed = Math.floor((Date.now() - meetingStartTime) / 1000);
+                const minutes = Math.floor(elapsed / 60);
+                const seconds = elapsed % 60;
+                meetingTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        // Stop meeting timer
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            meetingTime.textContent = '00:00';
+        }
+
+        // SVG icons
+        const icons = {
+            videoOn: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-white"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>',
+            videoOff: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-white"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M12 18.75H4.5a2.25 2.25 0 0 1-2.25-2.25V9m12.841 9.091L16.5 19.5m-1.409-1.409c.407-.407.659-.97.659-1.591v-9a2.25 2.25 0 0 0-2.25-2.25h-9c-.621 0-1.184.252-1.591.659m12.182 12.182L2.909 5.909M1.5 4.5l1.409 1.409" /></svg>',
+            micOn: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-white"><path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" /></svg>',
+            micOff: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-white"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.009 9.009 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" /></svg>'
+        };
+
+        // Toggle camera
+        async function toggleCameraControl() {
+            if (!localTracks.videoTrack) return;
+
+            if (isVideoEnabled) {
+                await localTracks.videoTrack.setEnabled(false);
+                isVideoEnabled = false;
+                toggleCamera.classList.remove('bg-gray-700', 'hover:bg-gray-600');
+                toggleCamera.classList.add('bg-red-600', 'hover:bg-red-700');
+                toggleCamera.innerHTML = icons.videoOff;
+                console.log('Camera disabled');
+            } else {
+                await localTracks.videoTrack.setEnabled(true);
+                isVideoEnabled = true;
+                toggleCamera.classList.remove('bg-red-600', 'hover:bg-red-700');
+                toggleCamera.classList.add('bg-gray-700', 'hover:bg-gray-600');
+                toggleCamera.innerHTML = icons.videoOn;
+                console.log('Camera enabled');
+            }
+        }
+
+        // Toggle microphone
+        async function toggleMicControl() {
+            if (!localTracks.audioTrack) return;
+
+            if (isAudioEnabled) {
+                await localTracks.audioTrack.setEnabled(false);
+                isAudioEnabled = false;
+                toggleMic.classList.remove('bg-gray-700', 'hover:bg-gray-600');
+                toggleMic.classList.add('bg-red-600', 'hover:bg-red-700');
+                toggleMic.innerHTML = icons.micOff;
+                console.log('Microphone muted');
+            } else {
+                await localTracks.audioTrack.setEnabled(true);
+                isAudioEnabled = true;
+                toggleMic.classList.remove('bg-red-600', 'hover:bg-red-700');
+                toggleMic.classList.add('bg-gray-700', 'hover:bg-gray-600');
+                toggleMic.innerHTML = icons.micOn;
+                console.log('Microphone unmuted');
+            }
         }
 
         // Join channel
@@ -242,15 +196,15 @@
             const channelName = channelInput.value.trim();
 
             if (!channelName) {
-                updateStatus('Please enter a channel name', true);
+                alert('Please enter a channel name');
                 return;
             }
 
             try {
-                updateStatus('Fetching token...');
                 joinBtn.disabled = true;
+                joinBtn.textContent = 'Joining...';
 
-                // Fetch token from Agora API (core service)
+                // Fetch token from Agora API
                 console.log('Fetching token for channel:', channelName);
                 const response = await fetch(`/api/agora/token/?channel=${channelName}`);
                 const data = await response.json();
@@ -259,13 +213,6 @@
                 if (!response.ok) {
                     throw new Error(data.error || 'Failed to get token');
                 }
-
-                updateStatus('Connecting to channel...');
-                console.log('Joining channel with:', {
-                    appId: data.appId,
-                    channel: data.channel,
-                    uid: data.uid
-                });
 
                 // Join the channel
                 const uid = await client.join(
@@ -276,41 +223,43 @@
                 );
                 console.log('Successfully joined channel with UID:', uid);
 
-                updateStatus('Creating local tracks...');
-
-                // Create local audio and video tracks
-                console.log('Creating microphone track...');
+                // Create local tracks
+                console.log('Creating local tracks...');
                 localTracks.audioTrack = await AgoraRTC.createMicrophoneAudioTrack();
-                console.log('Microphone track created');
-
-                console.log('Creating camera track...');
                 localTracks.videoTrack = await AgoraRTC.createCameraVideoTrack();
-                console.log('Camera track created');
+                console.log('Local tracks created');
 
-                // Play local video
-                console.log('Playing local video...');
-                // Clear container first
-                localContainer.innerHTML = '<div class="video-label">You (Local)</div>';
-                localTracks.videoTrack.play(localContainer);
-                console.log('Local video playing');
+                // Play local video in self-view
+                localTracks.videoTrack.play(selfView);
+                console.log('Local video playing in self-view');
 
                 // Publish local tracks
-                updateStatus('Publishing tracks...');
-                console.log('Publishing tracks...');
                 await client.publish([localTracks.audioTrack, localTracks.videoTrack]);
                 console.log('Tracks published successfully');
 
-                updateStatus('Connected! Waiting for others to join...');
+                // Switch to video call screen
+                preCallScreen.classList.add('hidden');
+                videoCallScreen.classList.remove('hidden');
 
-                joinBtn.disabled = true;
-                leaveBtn.disabled = false;
-                channelInput.disabled = true;
+                // Update meeting info
+                meetingCode.textContent = channelName;
+                startTimer();
+
+                // Reset button states
+                isVideoEnabled = true;
+                isAudioEnabled = true;
+                toggleCamera.classList.remove('bg-red-600', 'hover:bg-red-700');
+                toggleCamera.classList.add('bg-gray-700', 'hover:bg-gray-600');
+                toggleCamera.innerHTML = icons.videoOn;
+                toggleMic.classList.remove('bg-red-600', 'hover:bg-red-700');
+                toggleMic.classList.add('bg-gray-700', 'hover:bg-gray-600');
+                toggleMic.innerHTML = icons.micOn;
 
             } catch (error) {
                 console.error('Error joining channel:', error);
-                console.error('Error details:', error.code, error.message);
-                updateStatus(`Error: ${error.message}`, true);
+                alert(`Error: ${error.message}`);
                 joinBtn.disabled = false;
+                joinBtn.textContent = 'Join Call';
 
                 // Clean up on error
                 if (localTracks.audioTrack) {
@@ -343,19 +292,25 @@
                 // Leave the channel
                 await client.leave();
 
-                updateStatus('Left the channel');
+                console.log('Left the channel');
 
+                // Stop timer
+                stopTimer();
+
+                // Switch back to pre-call screen
+                videoCallScreen.classList.add('hidden');
+                preCallScreen.classList.remove('hidden');
+
+                // Reset join button
                 joinBtn.disabled = false;
-                leaveBtn.disabled = true;
-                channelInput.disabled = false;
+                joinBtn.textContent = 'Join Call';
 
-                // Clear video containers
-                localContainer.innerHTML = '<div class="video-label">You (Local)</div>';
-                remoteContainer.innerHTML = '<div class="video-label">Remote User</div>';
+                // Clear main video
+                mainVideo.innerHTML = '<div class="absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1 rounded text-sm" id="remote-name">Waiting for others...</div>';
 
             } catch (error) {
                 console.error('Error leaving channel:', error);
-                updateStatus(`Error: ${error.message}`, true);
+                alert(`Error: ${error.message}`);
             }
         }
 
@@ -368,13 +323,16 @@
                 console.log("Playing remote video for user:", user.uid);
                 remoteUsers[user.uid] = user;
 
-                // Clear the container first
-                remoteContainer.innerHTML = '<div class="video-label">Remote User</div>';
+                // Play remote video in main-video container
+                mainVideo.innerHTML = '';
+                user.videoTrack.play(mainVideo);
+                console.log("Remote video playing in main view");
 
-                // Play the remote video
-                user.videoTrack.play(remoteContainer);
-                console.log("Remote video playing");
-                updateStatus('Remote user connected!');
+                // Update participant name
+                const nameLabel = document.createElement('div');
+                nameLabel.className = 'absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1 rounded text-sm';
+                nameLabel.textContent = `Participant ${user.uid}`;
+                mainVideo.appendChild(nameLabel);
             }
 
             if (mediaType === "audio") {
@@ -386,15 +344,17 @@
         // Handle user unpublished
         client.on("user-unpublished", (user, mediaType) => {
             if (mediaType === "video") {
+                console.log("Remote user unpublished video");
                 delete remoteUsers[user.uid];
-                remoteContainer.innerHTML = '<div class="video-label">Remote User</div>';
-                updateStatus('Remote user left');
+                mainVideo.innerHTML = '<div class="absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1 rounded text-sm" id="remote-name">Waiting for others...</div>';
             }
         });
 
         // Event listeners
         joinBtn.addEventListener('click', joinChannel);
-        leaveBtn.addEventListener('click', leaveChannel);
+        leaveCallBtn.addEventListener('click', leaveChannel);
+        toggleCamera.addEventListener('click', toggleCameraControl);
+        toggleMic.addEventListener('click', toggleMicControl);
 
         // Allow Enter key to join
         channelInput.addEventListener('keypress', (e) => {
