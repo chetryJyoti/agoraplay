@@ -30,7 +30,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-sfetppo&)@=bth@*d08f-40y+7
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['bb565b9a7cbe.ngrok-free.app', "localhost"]
+ALLOWED_HOSTS = ['nondominating-fran-properly.ngrok-free.dev', "localhost"]
 
 
 # Application definition
