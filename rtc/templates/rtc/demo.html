@@ -173,6 +173,69 @@
             console.log(`Participant count updated: ${totalCount}`);
         }
 
+        // Generate initials from user ID
+        function getInitials(uid) {
+            if (uid === 0 || uid === 'local') {
+                return 'You';
+            }
+            // For participant IDs, use "P" + last 2 digits
+            const uidStr = uid.toString();
+            return 'P' + uidStr.slice(-2);
+        }
+
+        // Generate random pastel color based on UID
+        function getAvatarColor(uid) {
+            const colors = [
+                '#60A5FA', // blue
+                '#34D399', // green
+                '#FBBF24', // yellow
+                '#F87171', // red
+                '#A78BFA', // purple
+                '#FB923C', // orange
+                '#EC4899', // pink
+                '#14B8A6', // teal
+            ];
+            const index = (typeof uid === 'number' ? uid : 0) % colors.length;
+            return colors[index];
+        }
+
+        // Create avatar placeholder
+        function createAvatarPlaceholder(uid, isMainView = true) {
+            const initials = getInitials(uid);
+            const color = getAvatarColor(uid);
+            const size = isMainView ? 'w-32 h-32 text-4xl' : 'w-20 h-20 text-2xl';
+
+            const avatar = document.createElement('div');
+            avatar.className = `avatar-placeholder absolute inset-0 flex items-center justify-center bg-gray-800`;
+            avatar.innerHTML = `
+                <div class="${size} rounded-full flex items-center justify-center font-bold text-white" style="background-color: ${color}">
+                    ${initials}
+                </div>
+            `;
+            return avatar;
+        }
+
+        // Show avatar in container
+        function showAvatar(container, uid, isMainView = true) {
+            // Remove existing avatar if any
+            const existingAvatar = container.querySelector('.avatar-placeholder');
+            if (existingAvatar) {
+                existingAvatar.remove();
+            }
+
+            // Create and add new avatar
+            const avatar = createAvatarPlaceholder(uid, isMainView);
+            container.appendChild(avatar);
+        }
+
+        // Hide avatar from container
+        function hideAvatar(container) {
+            const existingAvatar = container.querySelector('.avatar-placeholder');
+            if (existingAvatar) {
+                existingAvatar.remove();
+            }
+        }
+
         // SVG icons
         const icons = {
             videoOn: '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-white"><path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" /></svg>',
@@ -191,14 +254,31 @@
                 toggleCamera.classList.remove('bg-gray-700', 'hover:bg-gray-600');
                 toggleCamera.classList.add('bg-red-600', 'hover:bg-red-700');
                 toggleCamera.innerHTML = icons.videoOff;
-                console.log('Camera disabled');
+
+                // Determine which container the local user is in
+                const hasRemoteUsers = Object.keys(remoteUsers).length > 0;
+                const container = (hasRemoteUsers && !isLocalInMainView) ? selfView : mainVideo;
+                const isMainViewContainer = container === mainVideo;
+
+                // Show avatar placeholder
+                showAvatar(container, 'local', isMainViewContainer);
+
+                console.log('Camera disabled - showing avatar');
             } else {
                 await localTracks.videoTrack.setEnabled(true);
                 isVideoEnabled = true;
                 toggleCamera.classList.remove('bg-red-600', 'hover:bg-red-700');
                 toggleCamera.classList.add('bg-gray-700', 'hover:bg-gray-600');
                 toggleCamera.innerHTML = icons.videoOn;
-                console.log('Camera enabled');
+
+                // Determine which container the local user is in
+                const hasRemoteUsers = Object.keys(remoteUsers).length > 0;
+                const container = (hasRemoteUsers && !isLocalInMainView) ? selfView : mainVideo;
+
+                // Hide avatar placeholder
+                hideAvatar(container);
+
+                console.log('Camera enabled - hiding avatar');
             }
         }
 
@@ -228,9 +308,9 @@
             // Get the first remote user
             const remoteUser = Object.values(remoteUsers)[0];
 
-            // Only allow toggle if we have both local and remote tracks
-            if (!localTracks.videoTrack || !remoteUser || !remoteUser.videoTrack) {
-                console.log('Cannot toggle view - missing video tracks');
+            // Only allow toggle if we have a remote user
+            if (!remoteUser) {
+                console.log('Cannot toggle view - no remote user');
                 return;
             }
 
@@ -240,8 +320,20 @@
 
             if (isLocalInMainView) {
                 // Switch back: Local to small view, Remote to main view
-                localTracks.videoTrack.play(selfView);
-                remoteUser.videoTrack.play(mainVideo);
+
+                // Show local video or avatar in small view
+                if (isVideoEnabled && localTracks.videoTrack) {
+                    localTracks.videoTrack.play(selfView);
+                } else {
+                    showAvatar(selfView, 'local', false);
+                }
+
+                // Show remote video or avatar in main view
+                if (remoteUser.videoTrack) {
+                    remoteUser.videoTrack.play(mainVideo);
+                } else {
+                    showAvatar(mainVideo, remoteUser.uid, true);
+                }
 
                 // Update labels
                 const selfLabel = document.createElement('div');
@@ -260,8 +352,20 @@
                 console.log('Switched to remote in main view');
             } else {
                 // Switch: Local to main view, Remote to small view
-                localTracks.videoTrack.play(mainVideo);
-                remoteUser.videoTrack.play(selfView);
+
+                // Show local video or avatar in main view
+                if (isVideoEnabled && localTracks.videoTrack) {
+                    localTracks.videoTrack.play(mainVideo);
+                } else {
+                    showAvatar(mainVideo, 'local', true);
+                }
+
+                // Show remote video or avatar in small view
+                if (remoteUser.videoTrack) {
+                    remoteUser.videoTrack.play(selfView);
+                } else {
+                    showAvatar(selfView, remoteUser.uid, false);
+                }
 
                 // Update labels
                 const mainLabel = document.createElement('div');
@@ -430,7 +534,15 @@
 
             if (mediaType === "video") {
                 console.log("Playing remote video for user:", user.uid);
-                remoteUsers[user.uid] = user;
+
+                // Store or update user
+                if (!remoteUsers[user.uid]) {
+                    remoteUsers[user.uid] = user;
+                    // Update participant count only for new users
+                    updateParticipantCount();
+                } else {
+                    remoteUsers[user.uid] = user;
+                }
 
                 // Show self-view when remote user joins
                 selfView.classList.remove('hidden');
@@ -438,10 +550,16 @@
                 // Enable click on main video (for toggling)
                 mainVideo.classList.add('cursor-pointer', 'hover:opacity-95');
 
-                // Move local video to self-view
-                if (localTracks.videoTrack) {
+                // Move local video to self-view (if not already there)
+                if (localTracks.videoTrack && !isLocalInMainView) {
                     selfView.innerHTML = '';
-                    localTracks.videoTrack.play(selfView);
+
+                    // Show avatar if local video is disabled, otherwise show video
+                    if (!isVideoEnabled) {
+                        showAvatar(selfView, 'local', false);
+                    } else {
+                        localTracks.videoTrack.play(selfView);
+                    }
 
                     // Add "You" label to self-view
                     const selfLabel = document.createElement('div');
@@ -454,6 +572,10 @@
                 // Play remote video in main-video container
                 mainVideo.innerHTML = '';
                 user.videoTrack.play(mainVideo);
+
+                // Hide any avatar that might be showing
+                hideAvatar(mainVideo);
+
                 console.log("Remote video playing in main view");
 
                 // Update participant name
@@ -462,13 +584,17 @@
                 nameLabel.className = 'absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1 rounded text-sm pointer-events-none';
                 nameLabel.textContent = `Participant ${user.uid}`;
                 mainVideo.appendChild(nameLabel);
-
-                // Update participant count
-                updateParticipantCount();
             }
 
             if (mediaType === "audio") {
                 console.log("Playing remote audio for user:", user.uid);
+
+                // Add user to remoteUsers if not already there (audio-only participant)
+                if (!remoteUsers[user.uid]) {
+                    remoteUsers[user.uid] = user;
+                    updateParticipantCount();
+                }
+
                 user.audioTrack.play();
             }
         });
@@ -476,50 +602,90 @@
         // Handle user unpublished
         client.on("user-unpublished", (user, mediaType) => {
             if (mediaType === "video") {
-                console.log("Remote user unpublished video");
-                delete remoteUsers[user.uid];
+                console.log("Remote user unpublished video (camera off):", user.uid);
 
-                // Check if there are any remaining remote users
-                const remainingUsers = Object.keys(remoteUsers).length;
+                // Check if user still has audio track (they're still in the call, just camera off)
+                const hasAudio = user.audioTrack && user.audioTrack.isPlaying;
 
-                if (remainingUsers === 0) {
-                    // No more remote users - hide self-view and show local in main view
-                    selfView.classList.add('hidden');
+                if (hasAudio) {
+                    // User is still in call, just turned off camera - show avatar
+                    console.log("User still in call, showing avatar");
 
-                    // Disable click on main video (no toggle when alone)
-                    mainVideo.classList.remove('cursor-pointer', 'hover:opacity-95');
+                    // Determine which container the user is in
+                    const userInMainView = !isLocalInMainView;
+                    const container = userInMainView ? mainVideo : selfView;
 
-                    // Reset view state
-                    isLocalInMainView = false;
+                    // Show avatar placeholder
+                    showAvatar(container, user.uid, userInMainView);
 
-                    // Move local video back to main view
-                    if (localTracks.videoTrack) {
-                        mainVideo.innerHTML = '';
-                        localTracks.videoTrack.play(mainVideo);
-
-                        // Add "You" label
-                        const youLabel = document.createElement('div');
-                        youLabel.className = 'absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1 rounded text-sm pointer-events-none';
-                        youLabel.textContent = 'You (Waiting for others...)';
-                        mainVideo.appendChild(youLabel);
-                    }
+                    // Keep the user label
+                    const nameLabel = document.createElement('div');
+                    nameLabel.id = userInMainView ? 'remote-name' : 'self-name';
+                    nameLabel.className = userInMainView
+                        ? 'absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1 rounded text-sm pointer-events-none'
+                        : 'absolute bottom-2 left-2 bg-black/60 text-white px-2 py-1 rounded text-xs pointer-events-none';
+                    nameLabel.textContent = `Participant ${user.uid}`;
+                    container.appendChild(nameLabel);
                 } else {
-                    // There are still other remote users, show the next one
-                    const nextUser = Object.values(remoteUsers)[0];
-                    if (nextUser && nextUser.videoTrack) {
-                        mainVideo.innerHTML = '';
-                        nextUser.videoTrack.play(mainVideo);
+                    // User completely left - remove them
+                    console.log("User left the call");
+                    delete remoteUsers[user.uid];
 
-                        const nameLabel = document.createElement('div');
-                        nameLabel.id = 'remote-name';
-                        nameLabel.className = 'absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1 rounded text-sm pointer-events-none';
-                        nameLabel.textContent = `Participant ${nextUser.uid}`;
-                        mainVideo.appendChild(nameLabel);
+                    // Check if there are any remaining remote users
+                    const remainingUsers = Object.keys(remoteUsers).length;
+
+                    if (remainingUsers === 0) {
+                        // No more remote users - hide self-view and show local in main view
+                        selfView.classList.add('hidden');
+
+                        // Disable click on main video (no toggle when alone)
+                        mainVideo.classList.remove('cursor-pointer', 'hover:opacity-95');
+
+                        // Reset view state
+                        isLocalInMainView = false;
+
+                        // Move local video back to main view
+                        if (localTracks.videoTrack) {
+                            mainVideo.innerHTML = '';
+
+                            // Show avatar if local video is disabled, otherwise show video
+                            if (!isVideoEnabled) {
+                                showAvatar(mainVideo, 'local', true);
+                            } else {
+                                localTracks.videoTrack.play(mainVideo);
+                            }
+
+                            // Add "You" label
+                            const youLabel = document.createElement('div');
+                            youLabel.className = 'absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1 rounded text-sm pointer-events-none';
+                            youLabel.textContent = 'You (Waiting for others...)';
+                            mainVideo.appendChild(youLabel);
+                        }
+                    } else {
+                        // There are still other remote users, show the next one
+                        const nextUser = Object.values(remoteUsers)[0];
+                        if (nextUser) {
+                            mainVideo.innerHTML = '';
+
+                            if (nextUser.videoTrack) {
+                                // User has video
+                                nextUser.videoTrack.play(mainVideo);
+                            } else {
+                                // User doesn't have video (camera off) - show avatar
+                                showAvatar(mainVideo, nextUser.uid, true);
+                            }
+
+                            const nameLabel = document.createElement('div');
+                            nameLabel.id = 'remote-name';
+                            nameLabel.className = 'absolute bottom-4 left-4 bg-black/60 text-white px-3 py-1 rounded text-sm pointer-events-none';
+                            nameLabel.textContent = `Participant ${nextUser.uid}`;
+                            mainVideo.appendChild(nameLabel);
+                        }
                     }
-                }
 
-                // Update participant count
-                updateParticipantCount();
+                    // Update participant count
+                    updateParticipantCount();
+                }
             }
         });
 
