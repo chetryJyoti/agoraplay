@@ -100,15 +100,3 @@ await client.join(appId, channel, token, uid);
 3. Backend generates a secure token using Agora credentials
 4. Frontend uses token to join Agora video channel
 5. Real-time video streaming happens via Agora's network
-
-## Next Steps
-
-Want to add more features? You can:
-- Add mute/unmute buttons
-- Support multiple remote users
-- Add text chat (Agora RTM)
-- Record calls (Agora Cloud Recording)
-
-## License
-
-MIT
