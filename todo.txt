@@ -1,0 +1,1 @@
+- Video call bug --  once a user is on call and new user joins -- the previous user does get the new users feed
