@@ -7,6 +7,9 @@ Can be used across multiple apps (rtc, chat, recording, streaming, etc.)
 from django.conf import settings
 from agora_token_builder import RtcTokenBuilder
 import time
+import requests
+import base64
+import json
 
 
 def generate_rtc_token(channel_name, uid=0, expiration_seconds=3600):
@@ -79,3 +82,216 @@ def generate_rtc_token(channel_name, uid=0, expiration_seconds=3600):
 # def generate_rtm_token(user_id, expiration_seconds=3600):
 #     """Generate Agora RTM (Real-Time Messaging) token for chat"""
 #     pass
+
+
+# ============================================================================
+# Cloud Recording Functions
+# ============================================================================
+
+def _get_auth_header():
+    """
+    Generate Basic Auth header for Agora Cloud Recording API
+
+    Returns:
+        dict: Headers with Authorization
+    """
+    customer_id = settings.AGORA_CUSTOMER_ID
+    customer_certificate = settings.AGORA_CUSTOMER_CERTIFICATE
+
+    if not customer_id or not customer_certificate:
+        raise ValueError('Agora Customer credentials not configured')
+
+    # Create Basic Auth credentials
+    credentials = f"{customer_id}:{customer_certificate}"
+    encoded_credentials = base64.b64encode(credentials.encode()).decode()
+
+    return {
+        'Authorization': f'Basic {encoded_credentials}',
+        'Content-Type': 'application/json'
+    }
+
+
+def _get_storage_config():
+    """
+    Get S3 storage configuration for cloud recording
+
+    Returns:
+        dict: Storage configuration
+    """
+    # AWS S3 vendor code is 1
+    # Region must be an integer code for S3
+    # Map of AWS region names to Agora region codes
+    region_map = {
+        'us-east-1': 0,
+        'us-east-2': 1,
+        'us-west-1': 2,
+        'us-west-2': 3,
+        'eu-west-1': 4,
+        'eu-west-2': 5,
+        'eu-west-3': 6,
+        'eu-central-1': 7,
+        'ap-southeast-1': 8,
+        'ap-southeast-2': 9,
+        'ap-northeast-1': 10,
+        'ap-northeast-2': 11,
+        'ap-south-1': 12,
+        'ca-central-1': 13,
+        'sa-east-1': 14,
+        'cn-north-1': 15,
+        'cn-northwest-1': 16
+    }
+
+    region_code = region_map.get(settings.AWS_S3_REGION_NAME, 12)  # Default to ap-south-1
+
+    return {
+        "vendor": 1,
+        "region": region_code,
+        "bucket": settings.AWS_STORAGE_BUCKET_NAME,
+        "accessKey": settings.AWS_ACCESS_KEY_ID,
+        "secretKey": settings.AWS_SECRET_ACCESS_KEY
+    }
+
+
+def acquire_recording_resource(channel_name, uid):
+    """
+    Acquire resource for cloud recording
+
+    This is the first step in starting a cloud recording.
+    Resource ID is valid for 5 minutes.
+
+    Args:
+        channel_name (str): Channel name to record
+        uid (str): Recording service UID (must be unique integer as string)
+
+    Returns:
+        dict: Contains resourceId
+
+    Raises:
+        Exception: If API request fails
+    """
+    app_id = settings.AGORA_APP_ID
+    url = f"https://api.agora.io/v1/apps/{app_id}/cloud_recording/acquire"
+
+    headers = _get_auth_header()
+
+    payload = {
+        "cname": channel_name,
+        "uid": uid,
+        "clientRequest": {}
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to acquire resource: {response.text}")
+
+    return response.json()
+
+
+def start_cloud_recording(resource_id, channel_name, uid, token, mode="mix"):
+    """
+    Start cloud recording
+
+    Args:
+        resource_id (str): Resource ID from acquire step
+        channel_name (str): Channel name to record
+        uid (str): Recording service UID (same as acquire)
+        token (str): RTC token for the recording service
+        mode (str): Recording mode - "individual" or "mix" (default: "mix")
+
+    Returns:
+        dict: Contains sid (recording session ID) and resourceId
+
+    Raises:
+        Exception: If API request fails
+    """
+    app_id = settings.AGORA_APP_ID
+    url = f"https://api.agora.io/v1/apps/{app_id}/cloud_recording/resourceid/{resource_id}/mode/{mode}/start"
+
+    headers = _get_auth_header()
+    storage_config = _get_storage_config()
+
+    payload = {
+        "cname": channel_name,
+        "uid": uid,
+        "clientRequest": {
+            "token": token,
+            "recordingConfig": {
+                "maxIdleTime": 30,
+                "streamTypes": 2,  # 0: audio only, 1: video only, 2: audio and video
+                "channelType": 0   # 0: Communication, 1: Live Broadcast
+            },
+            "storageConfig": storage_config
+        }
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to start recording: {response.text}")
+
+    return response.json()
+
+
+def stop_cloud_recording(resource_id, sid, channel_name, uid, mode="mix"):
+    """
+    Stop cloud recording
+
+    Args:
+        resource_id (str): Resource ID from acquire step
+        sid (str): Session ID from start step
+        channel_name (str): Channel name
+        uid (str): Recording service UID
+        mode (str): Recording mode used (default: "mix")
+
+    Returns:
+        dict: Contains upload status and file info
+
+    Raises:
+        Exception: If API request fails
+    """
+    app_id = settings.AGORA_APP_ID
+    url = f"https://api.agora.io/v1/apps/{app_id}/cloud_recording/resourceid/{resource_id}/sid/{sid}/mode/{mode}/stop"
+
+    headers = _get_auth_header()
+
+    payload = {
+        "cname": channel_name,
+        "uid": uid,
+        "clientRequest": {}
+    }
+
+    response = requests.post(url, headers=headers, json=payload)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to stop recording: {response.text}")
+
+    return response.json()
+
+
+def query_cloud_recording(resource_id, sid, mode="mix"):
+    """
+    Query cloud recording status
+
+    Args:
+        resource_id (str): Resource ID from acquire step
+        sid (str): Session ID from start step
+        mode (str): Recording mode used (default: "mix")
+
+    Returns:
+        dict: Recording status and file information
+
+    Raises:
+        Exception: If API request fails
+    """
+    app_id = settings.AGORA_APP_ID
+    url = f"https://api.agora.io/v1/apps/{app_id}/cloud_recording/resourceid/{resource_id}/sid/{sid}/mode/{mode}/query"
+
+    headers = _get_auth_header()
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        raise Exception(f"Failed to query recording: {response.text}")
+
+    return response.json()

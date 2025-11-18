@@ -5,3 +5,4 @@ python-dotenv==1.2.1
 sqlparse==0.5.3
 agora-token-builder==1.0.0
 django-cors-headers==4.6.0
+requests==2.32.3
