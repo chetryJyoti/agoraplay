@@ -44,6 +44,11 @@
                 <span class="text-sm font-medium" id="meeting-time">00:00</span>
                 <span class="text-gray-500">•</span>
                 <span class="text-sm font-medium" id="meeting-code"></span>
+                <!-- Recording Indicator -->
+                <div id="recording-indicator" class="hidden flex items-center gap-2 ml-2 px-3 py-1 bg-red-600/20 rounded-full border border-red-600">
+                    <div class="w-2 h-2 bg-red-600 rounded-full animate-pulse"></div>
+                    <span class="text-xs font-medium text-red-400">Recording</span>
+                </div>
             </div>
 
             <!-- Center: Controls -->
@@ -56,6 +61,12 @@
                 <button class="w-12 h-12 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors" id="toggle-camera" title="Camera">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-white">
                         <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
+                </button>
+                <button class="w-12 h-12 rounded-full bg-gray-700 hover:bg-gray-600 flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed" id="toggle-recording" title="Start Recording">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-white">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 9.563C9 9.252 9.252 9 9.563 9h4.874c.311 0 .563.252.563.563v4.874c0 .311-.252.563-.563.563H9.564A.562.562 0 0 1 9 14.437V9.564Z" />
                     </svg>
                 </button>
                 <button class="w-12 h-12 rounded-full bg-red-600 hover:bg-red-700 flex items-center justify-center transition-colors" id="leave-call-btn" title="Leave call">
@@ -122,6 +133,13 @@
         let isVideoEnabled = true;
         let isAudioEnabled = true;
 
+        // Recording state
+        let isRecording = false;
+        let recordingResourceId = null;
+        let recordingSid = null;
+        let currentChannel = null;
+        const RECORDING_UID = "999999"; // Unique UID for recording service
+
         // View state - track which video is in main view
         let isLocalInMainView = false; // false = remote in main, true = local in main
 
@@ -139,6 +157,8 @@
         const meetingTime = document.getElementById('meeting-time');
         const toggleMic = document.getElementById('toggle-mic');
         const toggleCamera = document.getElementById('toggle-camera');
+        const toggleRecording = document.getElementById('toggle-recording');
+        const recordingIndicator = document.getElementById('recording-indicator');
         const participantCount = document.getElementById('participant-count');
 
         // Meeting timer
@@ -303,6 +323,122 @@
             }
         }
 
+        // Start cloud recording
+        async function startRecording() {
+            if (isRecording || !currentChannel) {
+                console.log('Cannot start recording - already recording or no channel');
+                return;
+            }
+
+            try {
+                toggleRecording.disabled = true;
+                console.log('Starting recording for channel:', currentChannel);
+
+                const response = await fetch('/api/agora/recording/start/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        channel: currentChannel,
+                        uid: RECORDING_UID
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to start recording');
+                }
+
+                console.log('Recording started:', data);
+
+                // Save recording session info
+                recordingResourceId = data.resourceId;
+                recordingSid = data.sid;
+                isRecording = true;
+
+                // Update UI
+                toggleRecording.classList.remove('bg-gray-700', 'hover:bg-gray-600');
+                toggleRecording.classList.add('bg-red-600', 'hover:bg-red-700');
+                toggleRecording.title = 'Stop Recording';
+                recordingIndicator.classList.remove('hidden');
+                recordingIndicator.classList.add('flex');
+
+                console.log('Recording UI updated - recording active');
+
+            } catch (error) {
+                console.error('Error starting recording:', error);
+                alert(`Failed to start recording: ${error.message}`);
+            } finally {
+                toggleRecording.disabled = false;
+            }
+        }
+
+        // Stop cloud recording
+        async function stopRecording() {
+            if (!isRecording || !recordingResourceId || !recordingSid) {
+                console.log('Cannot stop recording - not recording');
+                return;
+            }
+
+            try {
+                toggleRecording.disabled = true;
+                console.log('Stopping recording...');
+
+                const response = await fetch('/api/agora/recording/stop/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        resourceId: recordingResourceId,
+                        sid: recordingSid,
+                        channel: currentChannel,
+                        uid: RECORDING_UID
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to stop recording');
+                }
+
+                console.log('Recording stopped:', data);
+
+                // Reset recording state
+                recordingResourceId = null;
+                recordingSid = null;
+                isRecording = false;
+
+                // Update UI
+                toggleRecording.classList.remove('bg-red-600', 'hover:bg-red-700');
+                toggleRecording.classList.add('bg-gray-700', 'hover:bg-gray-600');
+                toggleRecording.title = 'Start Recording';
+                recordingIndicator.classList.remove('flex');
+                recordingIndicator.classList.add('hidden');
+
+                alert('Recording stopped! Video will be uploaded to your S3 bucket.');
+                console.log('Recording UI updated - recording stopped');
+
+            } catch (error) {
+                console.error('Error stopping recording:', error);
+                alert(`Failed to stop recording: ${error.message}`);
+            } finally {
+                toggleRecording.disabled = false;
+            }
+        }
+
+        // Toggle recording on/off
+        async function toggleRecordingControl() {
+            if (isRecording) {
+                await stopRecording();
+            } else {
+                await startRecording();
+            }
+        }
+
         // Toggle view - swap between local and remote video
         function toggleVideoView() {
             // Get the first remote user
@@ -444,6 +580,7 @@
 
                 // Update meeting info
                 meetingCode.textContent = channelName;
+                currentChannel = channelName; // Store channel name for recording
                 startTimer();
 
                 // Reset button states
@@ -480,6 +617,11 @@
         // Leave channel
         async function leaveChannel() {
             try {
+                // Stop recording if active
+                if (isRecording) {
+                    await stopRecording();
+                }
+
                 // Stop and close local tracks
                 if (localTracks.audioTrack) {
                     localTracks.audioTrack.stop();
@@ -500,6 +642,17 @@
 
                 // Stop timer
                 stopTimer();
+
+                // Reset recording state
+                isRecording = false;
+                recordingResourceId = null;
+                recordingSid = null;
+                currentChannel = null;
+                toggleRecording.classList.remove('bg-red-600', 'hover:bg-red-700');
+                toggleRecording.classList.add('bg-gray-700', 'hover:bg-gray-600');
+                toggleRecording.title = 'Start Recording';
+                recordingIndicator.classList.remove('flex');
+                recordingIndicator.classList.add('hidden');
 
                 // Hide self-view
                 selfView.classList.add('hidden');
@@ -694,6 +847,7 @@
         leaveCallBtn.addEventListener('click', leaveChannel);
         toggleCamera.addEventListener('click', toggleCameraControl);
         toggleMic.addEventListener('click', toggleMicControl);
+        toggleRecording.addEventListener('click', toggleRecordingControl);
 
         // Allow Enter key to join
         channelInput.addEventListener('keypress', (e) => {
