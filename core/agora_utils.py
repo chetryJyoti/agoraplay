@@ -10,6 +10,8 @@ import time
 import requests
 import base64
 import json
+import boto3
+from botocore.exceptions import ClientError
 
 
 def generate_rtc_token(channel_name, uid=0, expiration_seconds=3600):
@@ -295,3 +297,165 @@ def query_cloud_recording(resource_id, sid, mode="mix"):
         raise Exception(f"Failed to query recording: {response.text}")
 
     return response.json()
+
+
+# ============================================================================
+# S3 Helper Functions for Recording Files
+# ============================================================================
+
+def _get_s3_client():
+    """Get boto3 S3 client with credentials"""
+    return boto3.client(
+        's3',
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_S3_REGION_NAME
+    )
+
+
+def list_recording_files(sid):
+    """
+    List all recording files in S3 for a given session ID
+
+    Args:
+        sid (str): Session ID from recording
+
+    Returns:
+        dict: {
+            'm3u8_files': [...],
+            'ts_files': [...],
+            'all_files': [...]
+        }
+    """
+    try:
+        s3_client = _get_s3_client()
+        bucket = settings.AWS_STORAGE_BUCKET_NAME
+
+        # List objects with prefix matching the session ID
+        response = s3_client.list_objects_v2(
+            Bucket=bucket,
+            Prefix=sid
+        )
+
+        if 'Contents' not in response:
+            return {
+                'm3u8_files': [],
+                'ts_files': [],
+                'all_files': []
+            }
+
+        all_files = [obj['Key'] for obj in response['Contents']]
+        m3u8_files = [f for f in all_files if f.endswith('.m3u8')]
+        ts_files = [f for f in all_files if f.endswith('.ts')]
+
+        return {
+            'm3u8_files': m3u8_files,
+            'ts_files': ts_files,
+            'all_files': all_files
+        }
+
+    except ClientError as e:
+        print(f"Error listing S3 files: {e}")
+        return {
+            'm3u8_files': [],
+            'ts_files': [],
+            'all_files': []
+        }
+
+
+def generate_presigned_url(file_key, expiration=3600):
+    """
+    Generate a presigned URL for an S3 file using regional endpoint
+
+    Args:
+        file_key (str): S3 object key (file path)
+        expiration (int): URL expiration time in seconds (default: 1 hour)
+
+    Returns:
+        str: Presigned URL or None if failed
+    """
+    try:
+        # Use regional endpoint to avoid redirects
+        region = settings.AWS_S3_REGION_NAME
+        bucket = settings.AWS_STORAGE_BUCKET_NAME
+
+        # Create S3 client with explicit region endpoint
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+            region_name=region,
+            config=boto3.session.Config(
+                signature_version='s3v4',
+                s3={'addressing_style': 'virtual'}
+            )
+        )
+
+        url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': bucket,
+                'Key': file_key
+            },
+            ExpiresIn=expiration
+        )
+
+        return url
+
+    except ClientError as e:
+        print(f"Error generating presigned URL: {e}")
+        return None
+
+
+def get_recording_playback_url(sid):
+    """
+    Get the master M3U8 file URL for playback
+
+    Args:
+        sid (str): Session ID from recording
+
+    Returns:
+        str: Presigned URL for the master M3U8 file, or None
+    """
+    files = list_recording_files(sid)
+
+    if not files['m3u8_files']:
+        return None
+
+    # Find the master M3U8 file (usually the shortest filename)
+    master_m3u8 = min(files['m3u8_files'], key=len)
+
+    return generate_presigned_url(master_m3u8, expiration=7200)  # 2 hours
+
+
+def setup_s3_cors():
+    """
+    Configure CORS on the S3 bucket to allow browser video playback
+
+    This allows the browser to load video files from S3 without CORS errors.
+    """
+    try:
+        s3_client = _get_s3_client()
+        bucket = settings.AWS_STORAGE_BUCKET_NAME
+
+        cors_configuration = {
+            'CORSRules': [{
+                'AllowedHeaders': ['*'],
+                'AllowedMethods': ['GET', 'HEAD'],
+                'AllowedOrigins': ['*'],  # Allow all origins (you can restrict this in production)
+                'ExposeHeaders': ['ETag'],
+                'MaxAgeSeconds': 3000
+            }]
+        }
+
+        s3_client.put_bucket_cors(
+            Bucket=bucket,
+            CORSConfiguration=cors_configuration
+        )
+
+        print(f"✅ CORS configuration applied to bucket: {bucket}")
+        return True
+
+    except ClientError as e:
+        print(f"❌ Error setting up CORS: {e}")
+        return False

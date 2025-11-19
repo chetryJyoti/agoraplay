@@ -18,6 +18,7 @@ urlpatterns = [
     path('recording/stop/', api_views.stop_recording, name='stop_recording'),
     path('recording/query/', api_views.query_recording, name='query_recording'),
     path('recording/list/', api_views.list_recordings, name='list_recordings'),
+    path('recording/playback/<int:recording_id>/', api_views.get_playback_url, name='get_playback_url'),
 
     # Future endpoints:
     # path('rtm/token/', api_views.get_rtm_token, name='rtm_token'),

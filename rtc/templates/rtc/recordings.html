@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Recordings - AgoraPlay</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Video.js for HLS playback -->
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
 </head>
 <body class="bg-gray-900 text-white min-h-screen">
     <!-- Header -->
@@ -58,6 +61,36 @@
         <!-- Recordings Grid -->
         <div id="recordings-grid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <!-- Recordings will be dynamically inserted here -->
+        </div>
+    </div>
+
+    <!-- Video Player Modal -->
+    <div id="video-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg w-full max-w-6xl overflow-hidden">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-4 border-b border-gray-700">
+                <h3 class="text-xl font-semibold" id="modal-title">Recording Playback</h3>
+                <button onclick="closeVideoModal()" class="p-2 hover:bg-gray-700 rounded-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <!-- Modal Body -->
+            <div class="p-4">
+                <div id="video-loading" class="text-center py-12">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                    <p class="text-gray-400 mt-4">Loading video...</p>
+                </div>
+                <div id="video-error" class="hidden text-center py-12">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-16 h-16 mx-auto text-red-500 mb-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                    </svg>
+                    <p class="text-red-400 text-lg" id="error-message">Failed to load video</p>
+                </div>
+                <video id="video-player" class="video-js vjs-big-play-centered hidden" controls preload="auto" width="100%" style="aspect-ratio: 16/9;">
+                </video>
+            </div>
         </div>
     </div>
 
@@ -152,8 +185,16 @@
                         <span class="text-gray-400">Duration: ${recording.duration}</span>
                     </div>
                     <div class="mt-4 pt-4 border-t border-gray-700 flex gap-2">
-                        <button onclick="viewInS3(${recording.id})" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors">
-                            View in S3
+                        <button onclick="playRecording(${recording.id}, '${recording.channel_name}')" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                            </svg>
+                            Play
+                        </button>
+                        <button onclick="viewInS3(${recording.id})" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition-colors" title="View in S3">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z" />
+                            </svg>
                         </button>
                         <button onclick="copyInfo(${recording.id})" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition-colors" title="Copy info">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
@@ -208,6 +249,83 @@
             document.getElementById('recordings-grid').classList.add('hidden');
             document.getElementById('empty-state').classList.add('hidden');
             loadRecordings();
+        });
+
+        // Video player instance
+        let player = null;
+
+        // Play recording
+        async function playRecording(recordingId, channelName) {
+            try {
+                // Show modal
+                document.getElementById('video-modal').classList.remove('hidden');
+                document.getElementById('modal-title').textContent = `${channelName} - Recording`;
+                document.getElementById('video-loading').classList.remove('hidden');
+                document.getElementById('video-error').classList.add('hidden');
+                document.getElementById('video-player').classList.add('hidden');
+
+                // Fetch playback URL
+                const response = await fetch(`/api/agora/recording/playback/${recordingId}/`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to get playback URL');
+                }
+
+                // Hide loading
+                document.getElementById('video-loading').classList.add('hidden');
+                document.getElementById('video-player').classList.remove('hidden');
+
+                // Initialize video player
+                if (player) {
+                    player.dispose();
+                }
+
+                player = videojs('video-player', {
+                    controls: true,
+                    autoplay: true,
+                    preload: 'auto',
+                    fluid: true
+                });
+
+                // Load video
+                player.src({
+                    src: data.playback_url,
+                    type: 'application/x-mpegURL'
+                });
+
+                console.log('Video loaded successfully');
+
+            } catch (error) {
+                console.error('Error playing recording:', error);
+                document.getElementById('video-loading').classList.add('hidden');
+                document.getElementById('video-error').classList.remove('hidden');
+                document.getElementById('error-message').textContent = error.message;
+            }
+        }
+
+        // Close video modal
+        function closeVideoModal() {
+            document.getElementById('video-modal').classList.add('hidden');
+            if (player) {
+                player.pause();
+                player.dispose();
+                player = null;
+            }
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('video-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'video-modal') {
+                closeVideoModal();
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !document.getElementById('video-modal').classList.contains('hidden')) {
+                closeVideoModal();
+            }
         });
 
         // Load recordings on page load

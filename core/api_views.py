@@ -14,7 +14,9 @@ from .agora_utils import (
     acquire_recording_resource,
     start_cloud_recording,
     stop_cloud_recording,
-    query_cloud_recording
+    query_cloud_recording,
+    get_recording_playback_url,
+    list_recording_files
 )
 from .models import Recording
 
@@ -382,6 +384,65 @@ def list_recordings(request):
     except Exception as e:
         return Response(
             {'error': f'Failed to fetch recordings: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+@api_view(['GET'])
+def get_playback_url(request, recording_id):
+    """
+    Get presigned playback URL for a recording
+
+    Args:
+        recording_id (int): Recording ID from database
+
+    Response:
+        {
+            "playback_url": "https://...",
+            "expires_in": 7200,
+            "files": {
+                "m3u8_files": [...],
+                "ts_files": [...],
+                "total_count": 10
+            }
+        }
+
+    Example:
+        GET /api/recording/playback/123/
+    """
+    try:
+        recording = Recording.objects.get(id=recording_id)
+
+        # Get playback URL
+        playback_url = get_recording_playback_url(recording.sid)
+
+        if not playback_url:
+            return Response(
+                {'error': 'No recording files found in S3'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Get file list
+        files = list_recording_files(recording.sid)
+
+        return Response({
+            'playback_url': playback_url,
+            'expires_in': 7200,  # 2 hours
+            'files': {
+                'm3u8_files': files['m3u8_files'],
+                'ts_files': files['ts_files'],
+                'total_count': len(files['all_files'])
+            }
+        })
+
+    except Recording.DoesNotExist:
+        return Response(
+            {'error': 'Recording not found'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    except Exception as e:
+        return Response(
+            {'error': f'Failed to get playback URL: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
