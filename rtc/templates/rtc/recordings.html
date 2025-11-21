@@ -288,13 +288,16 @@
                     fluid: true
                 });
 
-                // Load video
+                // Load video with appropriate MIME type (MP4 or HLS)
                 player.src({
                     src: data.playback_url,
-                    type: 'application/x-mpegURL'
+                    type: data.mime_type
                 });
 
-                console.log('Video loaded successfully');
+                console.log(`Video loaded successfully (${data.playback_type} format)`);
+
+                // Log file info for debugging
+                console.log('Available files:', data.files);
 
             } catch (error) {
                 console.error('Error playing recording:', error);

@@ -190,7 +190,7 @@ def acquire_recording_resource(channel_name, uid):
     return response.json()
 
 
-def start_cloud_recording(resource_id, channel_name, uid, token, mode="mix"):
+def start_cloud_recording(resource_id, channel_name, uid, token, mode="mix", file_format="mp4"):
     """
     Start cloud recording
 
@@ -200,6 +200,7 @@ def start_cloud_recording(resource_id, channel_name, uid, token, mode="mix"):
         uid (str): Recording service UID (same as acquire)
         token (str): RTC token for the recording service
         mode (str): Recording mode - "individual" or "mix" (default: "mix")
+        file_format (str): Output format - "mp4" or "hls" (default: "mp4")
 
     Returns:
         dict: Contains sid (recording session ID) and resourceId
@@ -213,6 +214,19 @@ def start_cloud_recording(resource_id, channel_name, uid, token, mode="mix"):
     headers = _get_auth_header()
     storage_config = _get_storage_config()
 
+    # Configure recording file format
+    recording_file_config = {}
+    if file_format == "mp4":
+        # MP4 format - generates a single .mp4 file
+        recording_file_config = {
+            "avFileType": ["hls", "mp4"]  # Generate both HLS and MP4 for compatibility
+        }
+    else:
+        # HLS format only (default legacy behavior)
+        recording_file_config = {
+            "avFileType": ["hls"]
+        }
+
     payload = {
         "cname": channel_name,
         "uid": uid,
@@ -221,8 +235,17 @@ def start_cloud_recording(resource_id, channel_name, uid, token, mode="mix"):
             "recordingConfig": {
                 "maxIdleTime": 30,
                 "streamTypes": 2,  # 0: audio only, 1: video only, 2: audio and video
-                "channelType": 0   # 0: Communication, 1: Live Broadcast
+                "channelType": 0,  # 0: Communication, 1: Live Broadcast
+                "videoStreamType": 0,  # 0: high stream, 1: low stream
+                "transcodingConfig": {
+                    "width": 1280,
+                    "height": 720,
+                    "fps": 30,
+                    "bitrate": 2000,
+                    "mixedVideoLayout": 1  # 0: float, 1: best fit, 2: vertical
+                }
             },
+            "recordingFileConfig": recording_file_config,
             "storageConfig": storage_config
         }
     }
@@ -322,6 +345,7 @@ def list_recording_files(sid):
 
     Returns:
         dict: {
+            'mp4_files': [...],
             'm3u8_files': [...],
             'ts_files': [...],
             'all_files': [...]
@@ -339,16 +363,19 @@ def list_recording_files(sid):
 
         if 'Contents' not in response:
             return {
+                'mp4_files': [],
                 'm3u8_files': [],
                 'ts_files': [],
                 'all_files': []
             }
 
         all_files = [obj['Key'] for obj in response['Contents']]
+        mp4_files = [f for f in all_files if f.endswith('.mp4')]
         m3u8_files = [f for f in all_files if f.endswith('.m3u8')]
         ts_files = [f for f in all_files if f.endswith('.ts')]
 
         return {
+            'mp4_files': mp4_files,
             'm3u8_files': m3u8_files,
             'ts_files': ts_files,
             'all_files': all_files
@@ -357,6 +384,7 @@ def list_recording_files(sid):
     except ClientError as e:
         print(f"Error listing S3 files: {e}")
         return {
+            'mp4_files': [],
             'm3u8_files': [],
             'ts_files': [],
             'all_files': []
@@ -409,23 +437,47 @@ def generate_presigned_url(file_key, expiration=3600):
 
 def get_recording_playback_url(sid):
     """
-    Get the master M3U8 file URL for playback
+    Get the playback URL for a recording (MP4 or M3U8)
+
+    Prefers MP4 files over HLS for simpler playback.
 
     Args:
         sid (str): Session ID from recording
 
     Returns:
-        str: Presigned URL for the master M3U8 file, or None
+        dict: {
+            'url': presigned URL,
+            'type': 'mp4' or 'hls',
+            'mime_type': MIME type for the file
+        } or None if no files found
     """
     files = list_recording_files(sid)
 
-    if not files['m3u8_files']:
-        return None
+    # Prefer MP4 files (simpler, no streaming required)
+    if files['mp4_files']:
+        # Get the first MP4 file (usually there's only one in mix mode)
+        mp4_file = files['mp4_files'][0]
+        url = generate_presigned_url(mp4_file, expiration=7200)  # 2 hours
 
-    # Find the master M3U8 file (usually the shortest filename)
-    master_m3u8 = min(files['m3u8_files'], key=len)
+        return {
+            'url': url,
+            'type': 'mp4',
+            'mime_type': 'video/mp4'
+        }
 
-    return generate_presigned_url(master_m3u8, expiration=7200)  # 2 hours
+    # Fallback to HLS if MP4 not available
+    if files['m3u8_files']:
+        # Find the master M3U8 file (usually the shortest filename)
+        master_m3u8 = min(files['m3u8_files'], key=len)
+        url = generate_presigned_url(master_m3u8, expiration=7200)  # 2 hours
+
+        return {
+            'url': url,
+            'type': 'hls',
+            'mime_type': 'application/x-mpegURL'
+        }
+
+    return None
 
 
 def setup_s3_cors():

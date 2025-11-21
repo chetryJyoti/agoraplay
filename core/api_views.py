@@ -99,7 +99,8 @@ def start_recording(request):
         {
             "channel": "channel-name",
             "uid": "999999",  # Recording service UID (must be unique integer)
-            "mode": "mix"     # optional: "mix" or "individual" (default: "mix")
+            "mode": "mix",    # optional: "mix" or "individual" (default: "mix")
+            "format": "mp4"   # optional: "mp4" or "hls" (default: "mp4")
         }
 
     Response:
@@ -113,12 +114,14 @@ def start_recording(request):
         POST /api/recording/start/
         {
             "channel": "demo-room",
-            "uid": "999999"
+            "uid": "999999",
+            "format": "mp4"
         }
     """
     channel = request.data.get('channel')
     uid = request.data.get('uid')
     mode = request.data.get('mode', 'mix')
+    file_format = request.data.get('format', 'mp4')
 
     if not channel:
         return Response(
@@ -149,7 +152,7 @@ def start_recording(request):
 
         # Step 3: Start recording
         start_response = start_cloud_recording(
-            resource_id, channel, uid, token, mode
+            resource_id, channel, uid, token, mode, file_format
         )
 
         sid = start_response.get('sid')
@@ -169,6 +172,7 @@ def start_recording(request):
             'resourceId': resource_id,
             'sid': sid,
             'recordingId': recording.id,
+            'format': file_format,
             'message': 'Recording started successfully'
         })
 
@@ -399,8 +403,11 @@ def get_playback_url(request, recording_id):
     Response:
         {
             "playback_url": "https://...",
+            "playback_type": "mp4" or "hls",
+            "mime_type": "video/mp4" or "application/x-mpegURL",
             "expires_in": 7200,
             "files": {
+                "mp4_files": [...],
                 "m3u8_files": [...],
                 "ts_files": [...],
                 "total_count": 10
@@ -414,9 +421,9 @@ def get_playback_url(request, recording_id):
         recording = Recording.objects.get(id=recording_id)
 
         # Get playback URL
-        playback_url = get_recording_playback_url(recording.sid)
+        playback_data = get_recording_playback_url(recording.sid)
 
-        if not playback_url:
+        if not playback_data:
             return Response(
                 {'error': 'No recording files found in S3'},
                 status=status.HTTP_404_NOT_FOUND
@@ -426,9 +433,12 @@ def get_playback_url(request, recording_id):
         files = list_recording_files(recording.sid)
 
         return Response({
-            'playback_url': playback_url,
+            'playback_url': playback_data['url'],
+            'playback_type': playback_data['type'],
+            'mime_type': playback_data['mime_type'],
             'expires_in': 7200,  # 2 hours
             'files': {
+                'mp4_files': files['mp4_files'],
                 'm3u8_files': files['m3u8_files'],
                 'ts_files': files['ts_files'],
                 'total_count': len(files['all_files'])
