@@ -8,4 +8,5 @@ app_name = 'rtc'
 
 urlpatterns = [
     path('demo/', views.demo, name='demo'),
+    path('recordings/', views.recordings, name='recordings'),
 ]

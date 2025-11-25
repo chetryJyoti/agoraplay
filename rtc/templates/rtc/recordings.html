@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recordings - AgoraPlay</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Video.js for HLS playback -->
+    <link href="https://vjs.zencdn.net/8.10.0/video-js.css" rel="stylesheet" />
+    <script src="https://vjs.zencdn.net/8.10.0/video.min.js"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- Header -->
+    <div class="bg-gray-800 border-b border-gray-700">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold">Video Recordings</h1>
+                    <p class="text-gray-400 text-sm mt-1">View and manage your cloud recordings</p>
+                </div>
+                <a href="/rtc/demo/" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">
+                    New Call
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-6 py-8">
+        <!-- Filter Bar -->
+        <div class="mb-6 flex items-center gap-4">
+            <input
+                type="text"
+                id="search-input"
+                placeholder="Search by channel name..."
+                class="flex-1 px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+            >
+            <button id="refresh-btn" class="px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg font-medium transition-colors">
+                Refresh
+            </button>
+        </div>
+
+        <!-- Loading State -->
+        <div id="loading" class="text-center py-12">
+            <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            <p class="text-gray-400 mt-4">Loading recordings...</p>
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="hidden text-center py-12">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-16 h-16 mx-auto text-gray-600 mb-4">
+                <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M12 18.75H4.5a2.25 2.25 0 0 1-2.25-2.25V9m12.841 9.091L16.5 19.5m-1.409-1.409c.407-.407.659-.97.659-1.591v-9a2.25 2.25 0 0 0-2.25-2.25h-9c-.621 0-1.184.252-1.591.659m12.182 12.182L2.909 5.909M1.5 4.5l1.409 1.409" />
+            </svg>
+            <h3 class="text-xl font-medium text-gray-300 mb-2">No recordings yet</h3>
+            <p class="text-gray-500">Start a video call and click the record button to create your first recording</p>
+            <a href="/rtc/demo/" class="inline-block mt-6 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">
+                Start Recording
+            </a>
+        </div>
+
+        <!-- Recordings Grid -->
+        <div id="recordings-grid" class="hidden grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <!-- Recordings will be dynamically inserted here -->
+        </div>
+    </div>
+
+    <!-- Video Player Modal -->
+    <div id="video-modal" class="hidden fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg w-full max-w-6xl overflow-hidden">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-4 border-b border-gray-700">
+                <h3 class="text-xl font-semibold" id="modal-title">Recording Playback</h3>
+                <button onclick="closeVideoModal()" class="p-2 hover:bg-gray-700 rounded-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <!-- Modal Body -->
+            <div class="p-4">
+                <div id="video-loading" class="text-center py-12">
+                    <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+                    <p class="text-gray-400 mt-4">Loading video...</p>
+                </div>
+                <div id="video-error" class="hidden text-center py-12">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-16 h-16 mx-auto text-red-500 mb-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                    </svg>
+                    <p class="text-red-400 text-lg" id="error-message">Failed to load video</p>
+                </div>
+                <video id="video-player" class="video-js vjs-big-play-centered hidden" controls preload="auto" width="100%" style="aspect-ratio: 16/9;">
+                </video>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let allRecordings = [];
+
+        // Load recordings on page load
+        async function loadRecordings() {
+            try {
+                const response = await fetch('/api/agora/recording/list/');
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to load recordings');
+                }
+
+                allRecordings = data.recordings;
+                displayRecordings(allRecordings);
+
+            } catch (error) {
+                console.error('Error loading recordings:', error);
+                document.getElementById('loading').innerHTML = `
+                    <p class="text-red-500">Error loading recordings: ${error.message}</p>
+                    <button onclick="loadRecordings()" class="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg">
+                        Retry
+                    </button>
+                `;
+            }
+        }
+
+        // Display recordings
+        function displayRecordings(recordings) {
+            const loading = document.getElementById('loading');
+            const emptyState = document.getElementById('empty-state');
+            const grid = document.getElementById('recordings-grid');
+
+            loading.classList.add('hidden');
+
+            if (recordings.length === 0) {
+                emptyState.classList.remove('hidden');
+                grid.classList.add('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            grid.classList.remove('hidden');
+
+            // Clear grid
+            grid.innerHTML = '';
+
+            // Add recording cards
+            recordings.forEach(recording => {
+                const card = createRecordingCard(recording);
+                grid.appendChild(card);
+            });
+        }
+
+        // Create recording card
+        function createRecordingCard(recording) {
+            const card = document.createElement('div');
+            card.className = 'bg-gray-800 rounded-lg border border-gray-700 overflow-hidden hover:border-blue-500 transition-colors';
+
+            // Format date
+            const date = new Date(recording.started_at);
+            const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const timeStr = date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+            // Status badge color
+            const statusColors = {
+                'recording': 'bg-red-600',
+                'stopped': 'bg-green-600',
+                'uploaded': 'bg-blue-600',
+                'failed': 'bg-gray-600'
+            };
+            const statusColor = statusColors[recording.status] || 'bg-gray-600';
+
+            card.innerHTML = `
+                <div class="aspect-video bg-gray-900 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-16 h-16 text-gray-600">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+                    </svg>
+                </div>
+                <div class="p-4">
+                    <div class="flex items-start justify-between mb-2">
+                        <h3 class="font-semibold text-lg text-white truncate flex-1">${recording.channel_name}</h3>
+                        <span class="${statusColor} text-xs px-2 py-1 rounded-full capitalize ml-2">${recording.status}</span>
+                    </div>
+                    <p class="text-gray-400 text-sm mb-3">
+                        ${dateStr} at ${timeStr}
+                    </p>
+                    <div class="flex items-center justify-between text-sm">
+                        <span class="text-gray-400">Duration: ${recording.duration}</span>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-gray-700 flex gap-2">
+                        <button onclick="playRecording(${recording.id}, '${recording.channel_name}')" class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                            </svg>
+                            Play
+                        </button>
+                        <button onclick="viewInS3(${recording.id})" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition-colors" title="View in S3">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z" />
+                            </svg>
+                        </button>
+                        <button onclick="copyInfo(${recording.id})" class="px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition-colors" title="Copy info">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            return card;
+        }
+
+        // View recording in S3
+        function viewInS3(recordingId) {
+            const recording = allRecordings.find(r => r.id === recordingId);
+            if (!recording) return;
+
+            const s3Url = `https://s3.console.aws.amazon.com/s3/buckets/${recording.s3_bucket}`;
+            window.open(s3Url, '_blank');
+        }
+
+        // Copy recording info
+        function copyInfo(recordingId) {
+            const recording = allRecordings.find(r => r.id === recordingId);
+            if (!recording) return;
+
+            const info = `Channel: ${recording.channel_name}\nResource ID: ${recording.resource_id}\nSession ID: ${recording.sid}\nBucket: ${recording.s3_bucket}`;
+
+            navigator.clipboard.writeText(info).then(() => {
+                alert('Recording info copied to clipboard!');
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        // Search/filter recordings
+        function filterRecordings(searchTerm) {
+            const filtered = allRecordings.filter(rec =>
+                rec.channel_name.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+            displayRecordings(filtered);
+        }
+
+        // Event listeners
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            filterRecordings(e.target.value);
+        });
+
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            document.getElementById('loading').classList.remove('hidden');
+            document.getElementById('recordings-grid').classList.add('hidden');
+            document.getElementById('empty-state').classList.add('hidden');
+            loadRecordings();
+        });
+
+        // Video player instance
+        let player = null;
+
+        // Play recording
+        async function playRecording(recordingId, channelName) {
+            try {
+                // Show modal
+                document.getElementById('video-modal').classList.remove('hidden');
+                document.getElementById('modal-title').textContent = `${channelName} - Recording`;
+                document.getElementById('video-loading').classList.remove('hidden');
+                document.getElementById('video-error').classList.add('hidden');
+                document.getElementById('video-player').classList.add('hidden');
+
+                // Fetch playback URL
+                const response = await fetch(`/api/agora/recording/playback/${recordingId}/`);
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to get playback URL');
+                }
+
+                // Hide loading
+                document.getElementById('video-loading').classList.add('hidden');
+                document.getElementById('video-player').classList.remove('hidden');
+
+                // Initialize video player
+                if (player) {
+                    player.dispose();
+                }
+
+                player = videojs('video-player', {
+                    controls: true,
+                    autoplay: true,
+                    preload: 'auto',
+                    fluid: true
+                });
+
+                // Load video with appropriate MIME type (MP4 or HLS)
+                player.src({
+                    src: data.playback_url,
+                    type: data.mime_type
+                });
+
+                console.log(`Video loaded successfully (${data.playback_type} format)`);
+
+                // Log file info for debugging
+                console.log('Available files:', data.files);
+
+            } catch (error) {
+                console.error('Error playing recording:', error);
+                document.getElementById('video-loading').classList.add('hidden');
+                document.getElementById('video-error').classList.remove('hidden');
+                document.getElementById('error-message').textContent = error.message;
+            }
+        }
+
+        // Close video modal
+        function closeVideoModal() {
+            document.getElementById('video-modal').classList.add('hidden');
+            if (player) {
+                player.pause();
+                player.dispose();
+                player = null;
+            }
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('video-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'video-modal') {
+                closeVideoModal();
+            }
+        });
+
+        // Close modal with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !document.getElementById('video-modal').classList.contains('hidden')) {
+                closeVideoModal();
+            }
+        });
+
+        // Load recordings on page load
+        loadRecordings();
+    </script>
+</body>
+</html>
